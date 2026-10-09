@@ -243,10 +243,24 @@ class App(ttk.Frame):
         self.root.destroy()
 
 
+def _set_icon(root: tk.Tk) -> None:
+    """Window / taskbar icon: .ico on Windows, .png elsewhere. Missing file is not an error."""
+    here = Path(__file__).resolve().parent
+    try:
+        if sys.platform.startswith("win"):
+            root.iconbitmap(default=str(here / "report_builder.ico"))
+        else:
+            root._icon = tk.PhotoImage(file=str(here / "report_builder.png"))  # keep a reference
+            root.iconphoto(True, root._icon)
+    except tk.TclError:
+        pass
+
+
 def run() -> int:
     root = tk.Tk()
     root.title(f"Report Builder {__version__}")
     root.minsize(760, 520)
+    _set_icon(root)
     try:
         ttk.Style().theme_use("clam" if sys.platform.startswith("linux") else ttk.Style().theme_use())
     except tk.TclError:
