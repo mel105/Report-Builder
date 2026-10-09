@@ -322,6 +322,12 @@ class DocBuilder:
         """
         if self._toc_anchor is None:
             return
+        # Word shows the cached "?" until fields are refreshed; ask it to do so on open.
+        settings = self.doc.settings.element
+        if settings.find(qn("w:updateFields")) is None:
+            flag = OxmlElement("w:updateFields")
+            flag.set(qn("w:val"), "true")
+            settings.append(flag)
         right = int(self._text_width_cm() * 567)  # cm -> twips
         anchor = self._toc_anchor
         for level, text, name in self._toc:
