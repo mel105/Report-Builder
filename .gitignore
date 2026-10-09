@@ -1,0 +1,29 @@
+# Generated reports and their raw material
+report_out/
+*.docx
+*.pdf
+!templates/*.docx
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Local settings and logs
+.report_builder.json
+.report_builder.log
+*.log
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local archive of old versions
+Archiv/
