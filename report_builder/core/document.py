@@ -21,6 +21,7 @@ from .sources import Source
 HEADER_FILL = "EEF3F8"
 BORDER = "CCCCCC"
 GREY = RGBColor(0x80, 0x80, 0x80)
+BODY_BOOKMARK = "RB_Body"
 
 
 def _slug(text: str) -> str:
@@ -48,6 +49,7 @@ class DocBuilder:
         self._n_fig = 0
         self._captions = []      # (paragraph, kind, text) - numbered in document order at save()
         self._toc = []          # (level, text, bookmark) of every heading we add
+        self._toc_par = {}      # bookmark -> heading paragraph element
         self._toc_anchor = None  # element the table of contents is written after
         self._date = datetime.now().strftime("%d.%m.%Y")
         self.doc = Document(str(template)) if template else Document()
@@ -158,6 +160,7 @@ class DocBuilder:
         p._p.insert(1 if p._p.pPr is not None else 0, start)
         p._p.append(end)
         self._toc.append((level, text, name))
+        self._toc_par[name] = p._p
 
     def para(self, text: str, italic: bool = False, size: Optional[float] = None):
         p = self.doc.add_paragraph()
@@ -330,9 +333,24 @@ class DocBuilder:
             settings.append(flag)
         right = int(self._text_width_cm() * 567)  # cm -> twips
         anchor = self._toc_anchor
-        for level, text, name in self._toc:
-            if level > 2:
-                continue
+        entries = [e for e in self._toc if e[0] <= 2]
+        if not entries:
+            return
+        self._bookmark_body()
+
+        def field_run(fld=None, instr=None):
+            r = OxmlElement("w:r")
+            if fld:
+                el = OxmlElement("w:fldChar")
+                el.set(qn("w:fldCharType"), fld)
+            else:
+                el = OxmlElement("w:instrText")
+                el.set(qn("xml:space"), "preserve")
+                el.text = instr
+            r.append(el)
+            return r
+
+        for index, (level, text, name) in enumerate(entries):
             p = OxmlElement("w:p")
             ppr = OxmlElement("w:pPr")
             tabs, tab = OxmlElement("w:tabs"), OxmlElement("w:tab")
@@ -346,6 +364,13 @@ class DocBuilder:
             for el in (tabs, spacing, ind):
                 ppr.append(el)
             p.append(ppr)
+            if index == 0:
+                # A real TOC field around the entries: Word rebuilds it itself (with correct
+                # page numbers) when it refreshes fields; the entries below are what
+                # LibreOffice shows, with page references it computes live.
+                p.append(field_run(fld="begin"))
+                p.append(field_run(instr=f' TOC \\o "1-2" \\h \\z \\b {BODY_BOOKMARK} '))
+                p.append(field_run(fld="separate"))
             link = OxmlElement("w:hyperlink")
             link.set(qn("w:anchor"), name)
             link.set(qn("w:history"), "1")
@@ -380,8 +405,24 @@ class DocBuilder:
             run("?")
             run(fld="end")
             p.append(link)
+            if index == len(entries) - 1:
+                p.append(field_run(fld="end"))
             anchor.addnext(p)
             anchor = p
+
+    def _bookmark_body(self) -> None:
+        """Bookmark everything from the first report heading to the end, so that the
+        contents list covers the report only (not the title page or 'Obsah' itself)."""
+        body = self.doc.element.body
+        order = {id(el): i for i, el in enumerate(body.iter(qn("w:p")))}
+        first = min(self._toc_par.values(), key=lambda el: order.get(id(el), 10 ** 9))
+        last = [el for el in body.iterchildren(qn("w:p"))][-1]
+        start, end = OxmlElement("w:bookmarkStart"), OxmlElement("w:bookmarkEnd")
+        for el in (start, end):
+            el.set(qn("w:id"), "8999")
+        start.set(qn("w:name"), BODY_BOOKMARK)
+        first.insert(1 if first.pPr is not None else 0, start)
+        last.append(end)
 
     def _number_captions(self) -> None:
         """Number tables and figures in reading order (chapters may have been moved)."""
